@@ -3,76 +3,74 @@ defmodule Circe do
   Documentation for `Circe`.
   """
 
-  defmacro input(ast) do
-    #_ = IO.puts("input(ast) = #{inspect(ast)}")
-    #_ = IO.puts("input(code) = #{Macro.to_string(ast)}")
-    #_ = IO.puts("input(escaped ast) = #{inspect(Macro.escape(ast))}")
-    #_ = IO.puts("input(escaped code) = #{Macro.to_string(Macro.escape(ast))}")
+  defmacro match(opts \\ [], ast) do
+    {match_ast, _metas} = process_input(ast, opts)
 
-    ast = Macro.prewalk(ast, fn
-      {l, _, r} -> {l, :"$to_ignore", r}
-      x -> x
-    end)
+    match_ast
+    #|> case do x -> _ = IO.puts("match:\n#{Macro.to_string(x)}") ; x end
+  end
 
-    meta_by_name =
-      traverse_ast(ast)
-      |> Map.new(fn {name, m} -> {name, put_in(m, [:var, Access.elem(1)], [])} end)
-
-    #_ = IO.inspect(meta_by_name, label: "traverse_ast result", syntax_colors: default_color())
-
-    var_by_escaped = Map.new(meta_by_name, fn {_name, meta} -> {Macro.escape(meta.ast), meta.var} end)
-
-    match_ast = replace_escaped(Macro.escape(ast), var_by_escaped)
-    match_ast = Macro.prewalk(match_ast, fn
-      :"$to_ignore" -> Macro.var(:_, nil)
-      x -> x
-    end)
-    #|> IO.inspect(label: "match_ast")
-
-    #_ = IO.puts("match_ast: #{Macro.to_string(match_ast)}")
-
-    result_ast = {:%{}, [], Enum.map(meta_by_name, fn {name, meta} -> {name, put_elem(meta.var, 1, [])} end)}
-    #             |> IO.inspect(label: "result_ast")
-
-    #_ = IO.puts("result_ast: #{Macro.to_string(result_ast)}")
-
-    quote do
-      fn
-        unquote(match_ast) -> {:ok, unquote(result_ast)}
-        _ -> {:error, :no_match}
-      end
+  def process_input(ast, opts) do
+    import_enabled? = case Keyword.get(opts, :import?, :enabled) do
+      :enabled -> :import_enabled
+      :disabled -> :operator_disabled
     end
-    #|> case do x -> _ = IO.puts("input:\n#{Macro.to_string(x)}") ; x end
+
+    operator_enabled? = case Keyword.get(opts, :operator?, :enabled) do
+      :enabled -> :operator_enabled
+      :disabled -> :operators_disabled
+    end
+
+    {prepared_ast, metas} =
+      prepare_ast(ast, import_enabled?, operator_enabled?)
+
+    var_by_escaped =
+      Map.new(metas, fn meta -> {Macro.escape(meta.ast), meta.var} end)
+
+    match_ast =
+      replace_escaped(Macro.escape(prepared_ast), var_by_escaped)
+
+    {match_ast, metas}
   end
 
   @doc false
-  def traverse_ast([{{:., _, [{:__aliases__, _, [:Circe]}, :extract_splicing]}, _, [{name, _, nil} = var]}] = ast) do
-    %{name => %{var: var, ast: ast}}
+  def prepare_ast([{{:., _, [{:__aliases__, _, [:Circe]}, :extract_splicing]}, _, [var]}] = ast, _, _) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast([{:extract_splicing, _, [{name, _, nil} = var]}] = ast) do
-    %{name => %{var: var, ast: ast}}
+  def prepare_ast([{:extract_splicing, _, [var]}] = ast, :import_enabled, _) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast({{:., _, [{:__aliases__, _, [:Circe]}, :extract]}, _, [{name, _, nil} = var]} = ast) do
-    %{name => %{var: var, ast: ast}}
+  def prepare_ast({{:., _, [{:__aliases__, _, [:Circe]}, :extract]}, _, [var]} = ast, _, _) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast({:extract, _, [{name, _, nil} = var]} = ast) do
-    %{name => %{var: var, ast: ast}}
+  def prepare_ast({:extract, _, [var]} = ast, :import_enabled, _) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast({left, _meta, right}) do
-    Map.merge(traverse_ast(left), traverse_ast(right))
+  def prepare_ast([{:~~~, _, [var]}] = ast, _, :operator_enabled) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast(xs) when is_list(xs) do
-    Enum.map(xs, &traverse_ast/1)
-    |> Enum.reduce(%{}, &Map.merge/2)
+  def prepare_ast({:@, _, [var]} = ast, _, :operator_enabled) do
+    {ast, [%{var: var, ast: ast}]}
   end
 
-  def traverse_ast(x) when is_atom(x) do
-    %{}
+  def prepare_ast({left, _meta, right}, import?, operator?) do
+    {ast_l, metas_l} = prepare_ast(left, import?, operator?)
+    {ast_r, metas_r} = prepare_ast(right, import?, operator?)
+    {{ast_l, :"$to_ignore", ast_r}, metas_l ++ metas_r}
+  end
+
+  def prepare_ast(xs, import?, operator?) when is_list(xs) do
+    Enum.unzip(Enum.map(xs, fn x -> prepare_ast(x, import?, operator?) end))
+    |> case do {ast, metass} -> {ast, Enum.concat(metass)} end
+  end
+
+  def prepare_ast(x, _, _) when is_atom(x) do
+    {x, []}
   end
 
   def replace_escaped(escaped_ast, m) do
@@ -87,15 +85,11 @@ defmodule Circe do
         xs when is_list(xs) ->
           Enum.map(xs, fn x -> replace_escaped(x, m) end)
 
+        :"$to_ignore" -> Macro.var(:_, nil)
+
         x -> x
       end
     end
-  end
-
-  defmacro output(_ast) do
-    #_ = IO.puts("output(ast) = #{inspect(ast)}")
-    #_ = IO.puts("output(code) = #{Macro.to_string(ast)}")
-    nil
   end
 
 
