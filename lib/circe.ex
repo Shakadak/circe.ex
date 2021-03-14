@@ -7,7 +7,7 @@ defmodule Circe do
     {match_ast, _metas} = process_input(ast, opts)
 
     match_ast
-    #|> case do x -> _ = IO.puts("match:\n#{Macro.to_string(x)}") ; x end
+    |> case do x -> _ = IO.puts("match:\n#{Macro.to_string(x)}") ; x end
   end
 
   def process_input(ast, opts) do
@@ -19,6 +19,11 @@ defmodule Circe do
     operator_enabled? = case Keyword.get(opts, :operator?, :enabled) do
       :enabled -> :operator_enabled
       :disabled -> :operators_disabled
+    end
+
+    ast = case Keyword.get(opts, :strip_list, false) do
+      true -> [ast] = ast ; ast
+      false -> ast
     end
 
     {prepared_ast, metas} =
