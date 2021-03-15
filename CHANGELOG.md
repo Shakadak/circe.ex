@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 * Base implementation
+  Circe.match/1,2 : can be used directly with code, but unusable for capturing some ASTs
+  Circe.sigil_m/2 : seems to work for all ASTs
 
 ---
 

@@ -7,7 +7,39 @@ defmodule Circe do
     {match_ast, _metas} = process_input(ast, opts)
 
     match_ast
-    |> case do x -> _ = IO.puts("match:\n#{Macro.to_string(x)}") ; x end
+    #|> case do x -> _ = IO.puts("match:\n#{Macro.to_string(x)}") ; x end
+  end
+
+  defmacrop spliced(pat) do
+    quote do
+      {:"::", _, [{{:., _, [Kernel, :to_string]}, _, [[spliced: unquote(pat)]]}, _]}
+    end
+  end
+
+  defmacrop singleton(pat) do
+    quote do
+      {:"::", _, [{{:., _, [Kernel, :to_string]}, _, [unquote(pat)]}, _]}
+    end
+  end
+
+  defmacrop qualified_extract_splicing(var) do
+    quote do
+      [{{:., _, [{:__aliases__, _, [:Circe]}, :extract_splicing]}, _, [unquote(var)]}]
+    end
+  end
+
+  def to_qualified_extract_splicing(var) do
+    [{{:., [], [{:__aliases__, [], [:Circe]}, :extract_splicing]}, [], [var]}]
+  end
+
+  defmacrop qualified_extract(var) do
+    quote do
+      {{:., _, [{:__aliases__, _, [:Circe]}, :extract]}, _, [unquote(var)]}
+    end
+  end
+
+  def to_qualified_extract(var) do
+    {{:., [], [{:__aliases__, [], [:Circe]}, :extract]}, [], [var]}
   end
 
   def process_input(ast, opts) do
@@ -28,12 +60,15 @@ defmodule Circe do
 
     {prepared_ast, metas} =
       prepare_ast(ast, import_enabled?, operator_enabled?)
+      #|> IO.inspect(label: "prepare_ast")
 
     var_by_escaped =
       Map.new(metas, fn meta -> {Macro.escape(meta.ast), meta.var} end)
+      #|> IO.inspect(label: "var_by_escaped")
 
     match_ast =
       replace_escaped(Macro.escape(prepared_ast), var_by_escaped)
+      #|> IO.inspect(label: "replace_escaped")
 
     {match_ast, metas}
   end
@@ -97,6 +132,80 @@ defmodule Circe do
     end
   end
 
+  defmacro sigil_m({:<<>>, _, term}, modifiers) do
+    #_ = IO.inspect(modifiers, label: "#{__MODULE__} -- modifiers")
+    #_ = IO.inspect(term, label: "#{__MODULE__} -- term")
+
+    opts = Enum.flat_map(modifiers, fn
+      ?w -> [strip_list: true]
+      _ -> []
+    end)
+
+    opts = Map.to_list(Map.merge(%{import?: :disabled, operator?: :disabled}, Map.new(opts)))
+
+    fallback_clause = quote do _ -> :no_match end
+    {iodata, {_n, match_ast}} = Enum.map_reduce(term, {0, fallback_clause}, fn
+      spliced(pat), {n, xs} ->
+        tmp_name = :"circe_match_#{n}"
+        match_ast = quote do [{unquote(tmp_name), _, _}] -> {:ok, unquote(Macro.escape(to_qualified_extract_splicing(pat)))} end
+        {to_string(tmp_name), {n + 1, match_ast ++ xs}}
+
+      singleton(pat), {n, xs} ->
+        tmp_name = :"circe_match_#{n}"
+        match_ast = quote do
+          {unquote(tmp_name), _, ast} ->
+            #IO.puts("MATCHED TUPLE")
+            disambiguate = fn
+              ^ast -> unquote(Macro.escape(to_qualified_extract(pat)))
+              new_ast -> {unquote(Macro.escape(to_qualified_extract(pat))), [], new_ast}
+            end
+            {:ambiguous, ast, disambiguate}
+
+          unquote(tmp_name) -> {:ok, unquote(Macro.escape(to_qualified_extract(pat)))}
+        end
+        {to_string(tmp_name), {n + 1, match_ast ++ xs}}
+
+      x, acc ->
+        {x, acc}
+    end)
+
+    {matcher, _} = Code.eval_quoted({:fn, [], match_ast})
+
+    ast = Code.string_to_quoted!(IO.iodata_to_binary(iodata), file: __CALLER__.file, line: __CALLER__.line)
+          #|> IO.inspect(label: "string_to_quoted result --")
+
+    preprocess(ast, matcher)
+    #|> IO.inspect(label: "preprocessed ast")
+    #|> case do x -> IO.puts("preprocessed -- #{Macro.to_string(x)}") ; x end
+    |> process_input(opts)
+    #|> IO.inspect(label: "processed ast")
+    #|> case do {x, _} -> IO.puts("processed -- #{Macro.to_string(x)}") ; x end
+    |> case do {match_ast, _} -> match_ast end
+  end
+
+  def preprocess(ast, matcher) do
+    case matcher.(ast) do
+      {:ok, ast} -> ast
+
+      {:ambiguous, sub_ast, finalize} ->
+        finalize.(preprocess(sub_ast, matcher))
+        #|> IO.inspect(label: "FINALIZED AS")
+
+      :no_match -> case ast do
+        {left, meta, right} ->
+          ast_left = preprocess(left, matcher)
+          ast_right = preprocess(right, matcher)
+          {ast_left, meta, ast_right}
+
+        xs when is_list(xs) ->
+          Enum.map(xs, fn x -> preprocess(x, matcher) end)
+
+        x when is_atom(x) -> x
+      end
+    end
+  end
+
+  ### Other ###
 
   @doc false
   def default_color do
