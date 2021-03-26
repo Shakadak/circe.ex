@@ -109,6 +109,12 @@ defmodule Circe do
     |> case do {ast, metass} -> {ast, Enum.concat(metass)} end
   end
 
+  # do block
+  def prepare_ast({:do, x}, import?, operator?) do
+    {ast, metas} = prepare_ast(x, import?, operator?)
+    {{:do, ast}, metas}
+  end
+
   def prepare_ast(x, _, _) when is_atom(x) do
     {x, []}
   end
@@ -124,6 +130,9 @@ defmodule Circe do
 
         xs when is_list(xs) ->
           Enum.map(xs, fn x -> replace_escaped(x, m) end)
+
+        {:do, x} -> # do block
+          {:do, replace_escaped(x, m)}
 
         :"$to_ignore" -> Macro.var(:_, nil)
 
@@ -178,9 +187,9 @@ defmodule Circe do
     #|> IO.inspect(label: "preprocessed ast")
     #|> case do x -> IO.puts("preprocessed -- #{Macro.to_string(x)}") ; x end
     |> process_input(opts)
-    #|> IO.inspect(label: "processed ast")
-    #|> case do {x, _} -> IO.puts("processed -- #{Macro.to_string(x)}") ; x end
     |> case do {match_ast, _} -> match_ast end
+    #|> IO.inspect(label: "processed ast")
+    #|> case do x -> IO.puts("processed -- #{Macro.to_string(x)}") ; x end
   end
 
   def preprocess(ast, matcher) do
@@ -199,6 +208,9 @@ defmodule Circe do
 
         xs when is_list(xs) ->
           Enum.map(xs, fn x -> preprocess(x, matcher) end)
+
+        {:do, x} -> # do block
+          {:do, preprocess(x, matcher)}
 
         x when is_atom(x) -> x
       end
