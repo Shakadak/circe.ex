@@ -3,6 +3,12 @@ defmodule Circe do
   Documentation for `Circe`.
   """
 
+  defmacrop tridot(pat) do
+    quote do
+      {:"::", _, [{{:., _, [Kernel, :to_string]}, _, [{:..., _, [unquote(pat)]}]}, _]}
+    end
+  end
+
   defmacrop spliced(pat) do
     quote do
       {:"::", _, [{{:., _, [Kernel, :to_string]}, _, [[spliced: unquote(pat)]]}, _]}
@@ -142,9 +148,9 @@ defmodule Circe do
       iex> Enum.any?(clauses, fn ~m/(#{_} -> :too_big)/w -> true ; _ -> false end)
       true
 
-  The equivalent to `unquote_splicing/3` is `#{[spliced: _]}`:
+  The equivalent to `unquote_splicing/3` is `#{..._}`:
       iex> import Circe
-      iex> ~m/{#{[spliced: desserts]}}/ = quote do {:banana, :split, :peach, :melba} end
+      iex> ~m/{#{...desserts}}/ = quote do {:banana, :split, :peach, :melba} end
       {:{}, [], [:banana, :split, :peach, :melba]}
       iex> desserts
       [:banana, :split, :peach, :melba]
@@ -160,7 +166,14 @@ defmodule Circe do
 
     fallback_clause = quote do _ -> :no_match end
     {iodata, {_n, match_ast}} = Enum.map_reduce(term, {0, fallback_clause}, fn
+      tridot(pat), {n, xs} ->
+        tmp_name = :"circe_match_#{n}"
+        match_ast = quote do [{unquote(tmp_name), _, _}] -> {:ok, unquote(Macro.escape(extract_splicing(pat)))} end
+        {to_string(tmp_name), {n + 1, match_ast ++ xs}}
+
       spliced(pat), {n, xs} ->
+        stacktrace = [{__MODULE__, :sigil_m, 2, [file: to_charlist(__CALLER__.file), line: __CALLER__.line]}]
+        _ = IO.warn("[spliced: #{Macro.to_string(pat)}] is deprecated in favor of ...#{Macro.to_string(pat)}", stacktrace)
         tmp_name = :"circe_match_#{n}"
         match_ast = quote do [{unquote(tmp_name), _, _}] -> {:ok, unquote(Macro.escape(extract_splicing(pat)))} end
         {to_string(tmp_name), {n + 1, match_ast ++ xs}}
