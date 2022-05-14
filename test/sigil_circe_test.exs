@@ -61,4 +61,15 @@ defmodule SigilCirceTest do
       args: [:split, :split],
     }}
   end
+
+  test "sigil match each element of a 2-tuple" do
+    import Circe
+
+    ast = quote do {:banana, :split} end
+    result = case ast do
+      ~m/{#{x}, #{y}}/ -> {:ok, [x, y]}
+    end
+
+    assert result = {:ok, [:banana, :split]}
+  end
 end
