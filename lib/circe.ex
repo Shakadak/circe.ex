@@ -34,8 +34,11 @@ defmodule Circe do
   @doc false
   def process_input(ast, opts) do
     ast = case Keyword.get(opts, :unwrap_list, false) do
-      true -> [ast] = ast ; ast
       false -> ast
+      true -> case ast do
+        [ast] -> ast
+        _ -> raise("Attempted to unwrap a non wrapped ast")
+      end
     end
 
     {prepared_ast, metas} =
