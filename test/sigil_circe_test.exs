@@ -6,8 +6,8 @@ defmodule SigilCirceTest do
 
     ast = quote do Module.extract(:split) end
     result = case ast do
-      ~m|#{m}.#{f}(#{as})| -> {:ok, %{module: m, function: f, args: as}}
-      ~m|#{module}.#{function}(#{... args})| -> {:ok, %{module: module, function: function, args: args}}
+      ~m/#{m}.#{f}(#{as})/ -> {:ok, %{module: m, function: f, args: as}}
+      ~m/#{module}.#{function}(#{... args})/ -> {:ok, %{module: module, function: function, args: args}}
     end
 
     assert result == {:ok, %{
@@ -22,8 +22,8 @@ defmodule SigilCirceTest do
 
     ast = quote do Module.extract(:split, :split) end
     result = case ast do
-      ~m|#{m}.#{f}(#{as})| -> {:ok, %{module: m, function: f, args: as}}
-      ~m|#{module}.#{function}(#{...args})| -> {:ok, %{module: module, function: function, args: args}}
+      ~m/#{m}.#{f}(#{as})/ -> {:ok, %{module: m, function: f, args: as}}
+      ~m/#{module}.#{function}(#{...args})/ -> {:ok, %{module: module, function: function, args: args}}
     end
 
     assert result == {:ok, %{
@@ -38,7 +38,7 @@ defmodule SigilCirceTest do
 
     ast = quote do Module.extract(:split, :split) end
     result = case ast do
-      ~m|#{{_, _, _} = module}.#{function}(#{...args})| -> {:ok, %{module: module, function: function, args: args}}
+      ~m/#{{_, _, _} = module}.#{function}(#{...args})/ -> {:ok, %{module: module, function: function, args: args}}
     end
 
     assert result == {:ok, %{
@@ -53,7 +53,7 @@ defmodule SigilCirceTest do
 
     ast = quote do extract(:split, :split) end
     result = case ast do
-      ~m|#{function}(#{...args})| -> {:ok, %{function: function, args: args}}
+      ~m/#{function}(#{...args})/ -> {:ok, %{function: function, args: args}}
     end
 
     assert result == {:ok, %{
@@ -70,6 +70,6 @@ defmodule SigilCirceTest do
       ~m/{#{x}, #{y}}/ -> {:ok, [x, y]}
     end
 
-    assert result = {:ok, [:banana, :split]}
+    assert result == {:ok, [:banana, :split]}
   end
 end

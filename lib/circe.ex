@@ -76,10 +76,10 @@ defmodule Circe do
     |> case do {ast, metass} -> {ast, Enum.concat(metass)} end
   end
 
-  # do block
-  def prepare_ast({:do, x}) do
+  def prepare_ast({x, y}) do
     {ast, metas} = prepare_ast(x)
-    {{:do, ast}, metas}
+    {ast2, metas2} = prepare_ast(y)
+    {{ast, ast2}, metas ++ metas2}
   end
 
   def prepare_ast(x) when is_atom(x) do
@@ -99,8 +99,8 @@ defmodule Circe do
         xs when is_list(xs) ->
           Enum.map(xs, fn x -> replace_escaped(x, m) end)
 
-        {:do, x} -> # do block
-          {:do, replace_escaped(x, m)}
+        {x, y} ->
+          {replace_escaped(x, m), replace_escaped(y, m)}
 
         :"$to_ignore" -> Macro.var(:_, nil)
 
@@ -202,6 +202,8 @@ defmodule Circe do
 
     {matcher, _} = Code.eval_quoted({:fn, [], match_ast})
 
+    #matcher |> case do x -> IO.puts("matcher -- #{Macro.to_string({:fn, [], match_ast})}") ; x end
+
     ast = Code.string_to_quoted!(IO.iodata_to_binary(iodata), file: __CALLER__.file, line: __CALLER__.line)
           #|> IO.inspect(label: "string_to_quoted result --")
 
@@ -232,8 +234,8 @@ defmodule Circe do
         xs when is_list(xs) ->
           Enum.map(xs, fn x -> preprocess(x, matcher) end)
 
-        {:do, x} -> # do block
-          {:do, preprocess(x, matcher)}
+        {x, y} ->
+          {preprocess(x, matcher), preprocess(y, matcher)}
 
         x when is_atom(x) -> x
       end
