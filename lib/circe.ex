@@ -157,6 +157,10 @@ defmodule Circe do
       {:{}, [], [:banana, :split, :peach, :melba]}
       iex> desserts
       [:banana, :split, :peach, :melba]
+
+  `...` is parsed by Elixir as an identifier, so `...[whatever]` will be parsed
+  as key-based access to a data structure, to avoid problems, insert a space between
+  `...` and the opening bracket `[`, for example `~m/def #{... [head, [do: body]]}/`
   """
   defmacro sigil_m({:<<>>, _, term}, modifiers) do
     #_ = IO.inspect(modifiers, label: "#{__MODULE__} -- modifiers")

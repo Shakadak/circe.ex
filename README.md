@@ -28,16 +28,10 @@ iex(6)> ~m/{#{...x}}/ = quote do {:banana, :split} end
 
 ```
 
-As can be seen from the last two examples, it's not yet possible to match on ast that can be literals
+As can be seen from the last two examples, it's not yet possible to match on asts that can be literals
 when it's representation could also be an application. In the case here:
 * 2-tuples are represented literally: `{:banana, :split} = quote do {:banana, :split}` end
-* n-typles (where n ≠ 2) are represented as an application `{:{}, _, xs} when is_list(xs) = quote do {:a, :b, :c, :d} end`
+* n-tuples (where n ≠ 2) are represented as an application `{:{}, _, xs} when is_list(xs) = quote do {:a, :b, :c, :d} end`
 
-```elixir
-iex(8)> ~m/{#{x}, #{y}}/ = quote do {:banana, :split} end    
-** (CaseClauseError) no case clause matching: {{:circe_match_0, [line: 8], nil}, {:circe_match_1, [line: 8], nil}}
-    (circe 0.1.0) lib/circe.ex:223: Circe.preprocess/2
-    (circe 0.1.0) expanding macro: Circe.sigil_m/2
-    iex:8: (file)
-```
-The above example is a problem in the library.
+No idea how to do that natively, we would need a way to merge multiple patterns into one.
+It should be possible with pattern synonyms though. (You can take a look at the package `pattern_metonyms`.)
